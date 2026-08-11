@@ -1,0 +1,14 @@
+[Unit]
+Description=BookStack Document Management Service
+After=network.target
+
+[Service]
+Type=simple
+User=bookstack
+ExecStart=/opt/bookstack/bookstack
+WorkingDirectory=/opt/bookstack
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
