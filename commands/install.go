@@ -26,31 +26,9 @@ func Install() {
 		os.Exit(1)
 	}
 	initSeo()
-	resetCategoryUniqueIndex()
 	migrateEbook()
 	fmt.Println("Install Successfully!")
 	os.Exit(0)
-}
-
-// 删除分类中的title的唯一索引（兼容旧版本）
-func resetCategoryUniqueIndex() {
-	var indexs []struct {
-		Table      string `orm:"column(Table)"`
-		NonUnique  int    `orm:"column(Non_unique)"`
-		KeyName    string `orm:"column(Key_name)"`
-		ColumnName string `orm:"column(Column_name)"`
-	}
-	showIndex := "SHOW INDEX FROM md_category"
-	dropIndex := "ALTER TABLE `md_category` DROP INDEX `%s`;"
-	addUniqueIndex := "ALTER TABLE `md_category` ADD UNIQUE( `pid`, `title`);"
-	o := orm.NewOrm()
-	o.Raw(showIndex).QueryRows(&indexs)
-	for _, index := range indexs {
-		if index.ColumnName == "title" {
-			o.Raw(fmt.Sprintf(dropIndex, index.KeyName)).Exec()
-		}
-	}
-	o.Raw(addUniqueIndex).Exec()
 }
 
 func Version() {
@@ -114,7 +92,7 @@ func initialization() {
 
 //初始化SEO
 func initSeo() {
-	sqlslice := []string{"insert ignore into `md_seo`(`id`,`page`,`statement`,`title`,`keywords`,`description`) values ('1','index','发现','书栈网(BookStack.CN)_分享，让知识传承更久远','{keywords}','{description}'),",
+	sqlslice := []string{"insert or ignore into md_seo(id,page,statement,title,keywords,description) values ('1','index','发现','书栈网(BookStack.CN)_分享，让知识传承更久远','{keywords}','{description}'),",
 		"('2','label_list','标签列表页','{title} - 书栈网(BookStack.CN)','{keywords}','{description}'),",
 		"('3','label_content','标签内容页','{title} - 书栈网(BookStack.CN)','{keywords}','{description}'),",
 		"('4','book_info','文档信息页','{title} - 书栈网(BookStack.CN)','{keywords}','{description}'),",
@@ -162,7 +140,7 @@ func migrateEbook() {
 	// 1. 查找 md_ebook 表中不存在的书籍的电子书
 	var (
 		books    []models.Book
-		sqlQuery = "SELECT book_id,generate_time,book_name,identify,label,description FROM `md_books` WHERE `generate_time`>'2010' and book_id not in (select book_id from md_ebook where book_id>0 group by book_id)"
+		sqlQuery = "SELECT book_id,generate_time,book_name,identify,label,description FROM md_books WHERE generate_time>'2010' and book_id not in (select book_id from md_ebook where book_id>0 group by book_id)"
 	)
 	o := orm.NewOrm()
 	o.Raw(sqlQuery).QueryRows(&books)

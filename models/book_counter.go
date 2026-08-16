@@ -159,9 +159,9 @@ func (*BookCounter) _sort(prd period, limit int, orderField string, withCache ..
 		}
 	}
 
-	sqlSort := "SELECT sum(c.view_cnt) as cnt,b.book_id,b.identify,b.cover,b.book_name  FROM `md_book_counter` c left JOIN md_books b on b.book_id=c.bid WHERE c.day>=? and c.day<=? and b.order_index>=0 and b.privately_owned=0 GROUP BY c.bid ORDER BY cnt desc limit ?"
+	sqlSort := "SELECT sum(c.view_cnt) as cnt,b.book_id,b.identify,b.cover,b.book_name  FROM md_book_counter c left JOIN md_books b on b.book_id=c.bid WHERE c.day>=? and c.day<=? and b.order_index>=0 and b.privately_owned=0 GROUP BY c.bid ORDER BY cnt desc limit ?"
 	if field == "star" {
-		sqlSort = "SELECT sum(c.star_cnt) as cnt,b.book_id,b.identify,b.cover,b.book_name  FROM `md_book_counter` c left JOIN md_books b on b.book_id=c.bid WHERE c.day>=? and c.day<=?  and b.order_index>=0 and b.privately_owned=0 GROUP BY c.bid ORDER BY cnt desc limit ?"
+		sqlSort = "SELECT sum(c.star_cnt) as cnt,b.book_id,b.identify,b.cover,b.book_name  FROM md_book_counter c left JOIN md_books b on b.book_id=c.bid WHERE c.day>=? and c.day<=?  and b.order_index>=0 and b.privately_owned=0 GROUP BY c.bid ORDER BY cnt desc limit ?"
 	}
 
 	start, end := getTimeRange(time.Now(), prd)

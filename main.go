@@ -10,7 +10,7 @@ import (
 	"github.com/TruthHun/BookStack/commands"
 	"github.com/TruthHun/BookStack/commands/daemon"
 	_ "github.com/TruthHun/BookStack/routers"
-	_ "github.com/go-sql-driver/mysql"
+	_ "modernc.org/sqlite"
 	"github.com/kardianos/service"
 )
 

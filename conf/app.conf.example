@@ -82,23 +82,12 @@ exportMarginBottom=36
 exportCustomCover=true
 
 
-####################MySQL 数据库配置###########################
-db_adapter=mysql
+####################数据库配置（嵌入式 SQLite）###########################
+# 数据库适配器，固定为 sqlite3（嵌入式，无需外部数据库服务）
+db_adapter=sqlite3
 
-# 您的数据库host
-db_host=
-
-#您的数据库端口
-db_port=3306
-
-#您的数据库用户名
-db_username=
-
-# 您的数据库密码
-db_password=
-
-# utf8或者utf8mb4数据库。如果数据库还没创建，并且账号有创建权限，将自动创建。
-db_database=bookstack
+# SQLite 数据库文件路径（相对于程序运行目录）。deb 安装后运行目录为 /opt/bookstack。
+db_file=data/bookstack.db
 
 # 谷歌浏览器，用于发布内容的时候渲染未被渲染的markdown。建议安装最新版的Chrome浏览器，并把Chrome浏览器加入系统环境变量。
 # 使用Chrome的headless去处理。之前考虑使用phantomjs的，但是phantomjs有些小问题，不如Chrome强大。

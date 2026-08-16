@@ -151,7 +151,7 @@ func (m *BookResult) FindToPager(pageIndex, pageSize int, private int, wd ...str
 		FROM md_books AS book
 			LEFT JOIN md_relationship AS rel ON rel.book_id = book.book_id AND rel.role_id = 0
 			LEFT JOIN md_members AS m ON rel.member_id = m.member_id %v
-		ORDER BY book.order_index DESC ,book.book_id DESC  LIMIT ?,?`
+		ORDER BY book.order_index DESC ,book.book_id DESC  LIMIT ? OFFSET ?`
 	condition := ""
 	condition = "where book.privately_owned=" + strconv.Itoa(private)
 	if word != "" {
@@ -161,7 +161,7 @@ func (m *BookResult) FindToPager(pageIndex, pageSize int, private int, wd ...str
 
 	sql = fmt.Sprintf(sql, condition)
 	offset := (pageIndex - 1) * pageSize
-	args = append(args, offset, pageSize)
+	args = append(args, pageSize, offset)
 	_, err = o.Raw(sql, args...).QueryRows(&books)
 	return
 }

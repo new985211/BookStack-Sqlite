@@ -21,7 +21,6 @@ import (
 	"log"
 
 	"github.com/TruthHun/BookStack/models"
-	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/orm"
 )
 
@@ -113,51 +112,22 @@ func RunMigration() {
 
 //导出数据库的表结构
 func ExportDatabaseTable() ([]string, error) {
-	dbAdapter := beego.AppConfig.String("db_adapter")
-	dbDatabase := beego.AppConfig.String("db_database")
 	tables := make([]string, 0)
 
 	o := orm.NewOrm()
-	switch dbAdapter {
-	case "mysql":
-		{
-			var lists []orm.Params
-			_, err := o.Raw(fmt.Sprintf("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '%s'", dbDatabase)).Values(&lists)
-			if err != nil {
-				return tables, err
-			}
-			for _, table := range lists {
-				var results []orm.Params
-
-				_, err = o.Raw(fmt.Sprintf("show create table %s", table["TABLE_NAME"])).Values(&results)
-				if err != nil {
-					return tables, err
-				}
-				tables = append(tables, results[0]["Create Table"].(string))
-			}
-			break
+	var results []orm.Params
+	_, err := o.Raw("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rootpage ASC").Values(&results)
+	if err != nil {
+		return tables, err
+	}
+	for _, item := range results {
+		if sql, ok := item["sql"]; ok {
+			tables = append(tables, sql.(string))
 		}
-	case "sqlite3":
-		{
-			var results []orm.Params
-			_, err := o.Raw("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY rootpage ASC").Values(&results)
-			if err != nil {
-				return tables, err
-			}
-			for _, item := range results {
-				if sql, ok := item["sql"]; ok {
-					tables = append(tables, sql.(string))
-				}
-			}
-			break
-		}
-
 	}
 	return tables, nil
 }
 
 func RegisterMigration() {
 	migrationList.items = list.New()
-
-	migrationList.items.PushBack(NewMigrationVersion03())
 }

@@ -4,12 +4,14 @@
 
 支持架构: **amd64** (x86_64) 和 **arm64** (ARM aarch64)。
 
+数据存储使用**嵌入式 SQLite**，安装后**无需配置任何数据库连接**，`dpkg -i` 即用。
+
 ## 系统要求
 
 | 组件 | 最低要求 |
 |------|---------|
 | 操作系统 | Kylin V10 SP1 / Ubuntu 20.04 |
-| 数据库 | MySQL 5.7+ 或 MariaDB 10.3+ (需预先安装) |
+| 数据库 | 无（内置 SQLite，随程序自动创建） |
 | 内存 | >= 512MB (推荐 2GB) |
 | 磁盘 | >= 200MB (不含上传文件存储) |
 
@@ -19,8 +21,9 @@
 bookstack_<version>_<arch>.deb
 ├── /opt/bookstack/
 │   ├── bookstack          # 可执行文件
+│   ├── data/              # SQLite 数据库文件目录 (bookstack.db 运行时生成)
 │   ├── conf/              # 配置文件目录
-│   │   ├── app.conf       # 主配置 (需按环境修改)
+│   │   ├── app.conf       # 主配置 (由 app.conf.example 自动生成)
 │   │   ├── oss.conf       # 对象存储配置
 │   │   └── oauth.conf     # OAuth 登录配置
 │   ├── views/             # 页面模板
@@ -33,23 +36,19 @@ bookstack_<version>_<arch>.deb
 ## 快速安装 (在线环境)
 
 ```bash
-# 1. 安装 MySQL (如未安装)
-sudo apt update
-sudo apt install -y mariadb-server
-sudo systemctl start mysql
-
-# 2. 安装 BookStack
+# 1. 安装 BookStack（无需安装数据库）
 sudo dpkg -i bookstack_2.0_amd64.deb   # x86_64
 # 或
 sudo dpkg -i bookstack_2.0_arm64.deb   # ARM
 
-# 3. 配置数据库连接
-sudo vi /opt/bookstack/conf/app.conf
+# 2. 初始化数据库（首次安装自动执行，也可手动触发）
+sudo -u bookstack /opt/bookstack/bookstack install
 
-# 4. 重启服务
+# 3. 启动服务（postinst 已自动启动，无需重复操作时跳过）
 sudo systemctl restart bookstack
 
-# 5. 访问 http://<服务器IP>:8181
+# 4. 访问 http://<服务器IP>:8181
+#    默认账号: admin / admin888
 ```
 
 ## 离线环境安装
@@ -72,21 +71,14 @@ scp output/2.0/bookstack_2.0_amd64.deb user@target:/tmp/
 ### 方式一: 自动安装脚本
 
 ```bash
-# 基本用法 (MySQL root 无密码)
+# 基本用法（无需任何数据库参数）
 sudo bash /tmp/offline-install.sh
 
-# 指定 MySQL 连接参数
-sudo bash /tmp/offline-install.sh \
-    --mysql-user root \
-    --mysql-pass mypassword \
-    --db-name bookstack \
-    --port 8181
+# 指定监听端口
+sudo bash /tmp/offline-install.sh --port 8080
 
 # 显式指定 deb 包路径
-sudo bash /tmp/offline-install.sh \
-    --deb-file /path/to/bookstack_2.0_amd64.deb \
-    --mysql-user root \
-    --mysql-pass mypassword
+sudo bash /tmp/offline-install.sh --deb-file /path/to/bookstack_2.0_amd64.deb
 
 # 查看完整参数
 bash /tmp/offline-install.sh --help
@@ -94,14 +86,7 @@ bash /tmp/offline-install.sh --help
 
 ### 方式二: 手动安装
 
-#### 步骤 1: 确认 MySQL 已就绪
-
-```bash
-sudo systemctl status mysql    # 确认运行中
-sudo mysql -u root -e "SELECT 1;"   # 确认可连接
-```
-
-#### 步骤 2: 安装 deb 包
+#### 步骤 1: 安装 deb 包
 
 ```bash
 # 根据机器架构选择:
@@ -112,39 +97,32 @@ ARCH=$(uname -m)
 sudo dpkg -i bookstack_2.0_${ARCH}.deb
 ```
 
-#### 步骤 3: 创建数据库
+#### 步骤 2: 初始化数据库
 
 ```bash
-sudo mysql -u root <<SQL
-CREATE DATABASE IF NOT EXISTS bookstack
-  DEFAULT CHARACTER SET utf8mb4
-  DEFAULT COLLATE utf8mb4_general_ci;
-SQL
+sudo -u bookstack /opt/bookstack/bookstack install
+# 会在 /opt/bookstack/data/bookstack.db 生成 SQLite 数据库与表结构
 ```
 
-#### 步骤 4: 配置应用
+#### 步骤 3: 配置（可选）
 
-编辑 `/opt/bookstack/conf/app.conf`:
+编辑 `/opt/bookstack/conf/app.conf`（首次会自动从 `app.conf.example` 生成）:
 
 ```ini
-# 必须修改的项:
-db_host=127.0.0.1          # MySQL 地址
-db_port=3306               # MySQL 端口
-db_username=root           # MySQL 用户名
-db_password=your_password  # MySQL 密码
-db_database=bookstack      # 数据库名
-httpport = 8181            # 监听端口
-runmode = prod             # 生产模式
+# 常用配置:
+db_file = data/bookstack.db   # SQLite 数据库文件路径（相对运行目录）
+httpport = 8181              # 监听端口
+runmode = prod               # 生产模式
 
 # 其他可选配置:
-static_domain=             # 静态资源 CDN 域名
-enable_mail=true           # 是否启用邮件
+static_domain=               # 静态资源 CDN 域名
+enable_mail=true             # 是否启用邮件
 chrome=/usr/bin/chromium-browser  # Chrome 浏览器路径 (PDF导出)
-puppeteer = false          # 是否使用 puppeteer
-store_type=local           # 存储类型: local / oss
+puppeteer = false            # 是否使用 puppeteer
+store_type=local             # 存储类型: local / oss
 ```
 
-#### 步骤 5: 确认依赖配置文件存在
+#### 步骤 4: 确认依赖配置文件存在
 
 ```bash
 cd /opt/bookstack/conf
@@ -152,7 +130,7 @@ test -f oss.conf   || cp oss.conf.example oss.conf
 test -f oauth.conf || cp oauth.conf.example oauth.conf
 ```
 
-#### 步骤 6: 启动服务
+#### 步骤 5: 启动服务
 
 ```bash
 sudo systemctl daemon-reload
@@ -160,7 +138,7 @@ sudo systemctl enable bookstack
 sudo systemctl start bookstack
 ```
 
-#### 步骤 7: 验证
+#### 步骤 6: 验证
 
 ```bash
 # 检查服务状态
@@ -194,21 +172,6 @@ sudo dpkg --purge bookstack
 
 ## 配置参考
 
-### MySQL 用户创建（推荐使用独立用户）
-
-```sql
-CREATE USER 'bookstack'@'127.0.0.1' IDENTIFIED BY 'strong_password';
-GRANT ALL PRIVILEGES ON bookstack.* TO 'bookstack'@'127.0.0.1';
-FLUSH PRIVILEGES;
-```
-
-然后在 `app.conf` 中使用该用户:
-
-```ini
-db_username=bookstack
-db_password=strong_password
-```
-
 ### 防火墙放行
 
 ```bash
@@ -238,8 +201,9 @@ server {
 ## 升级
 
 ```bash
-# 1. 备份配置
+# 1. 备份数据与配置（SQLite 数据库文件 + conf）
 sudo cp -r /opt/bookstack/conf /tmp/bookstack-conf-backup
+sudo cp -r /opt/bookstack/data /tmp/bookstack-data-backup
 
 # 2. 安装新版本
 sudo dpkg -i bookstack_3.0_amd64.deb
@@ -256,28 +220,7 @@ sudo systemctl restart bookstack
 | 现象 | 可能原因 | 解决 |
 |------|---------|------|
 | `panic: open /opt/bookstack/conf/oss.conf: no such file` | 缺少配置文件 | `cp /opt/bookstack/conf/oss.conf.example /opt/bookstack/conf/oss.conf` |
-| `dial tcp :3306: connect: connection refused` | MySQL 未开启 TCP 监听 | 见下方 "MySQL TCP 配置" |
-| `dial tcp 127.0.0.1:3306: connection refused` | MariaDB 以 `--skip-networking` 运行 | `sudo systemctl restart mysql` |
-| `Access denied for user` | 数据库凭证错误 | 检查 app.conf 中 db_username/db_password |
+| `database is locked` | SQLite 并发写锁 | 通常瞬时，程序已启用 busy_timeout + WAL 自动重试；持续出现时降低并发写 |
+| `unable to open database file` | data 目录不可写 | `sudo chown -R bookstack:bookstack /opt/bookstack/data` |
 | 端口 8181 不通 | 防火墙拦截 | `sudo ufw allow 8181/tcp` |
-| 服务不断重启 | 数据库连接失败 | `sudo journalctl -u bookstack -n 50` 查看错误详情 |
-
-### MySQL TCP 配置
-
-BookStack 默认通过 TCP 连接 MySQL（`db_host=127.0.0.1`），如果 MySQL 未开启 TCP:
-
-```bash
-# 启用 MySQL TCP 端口
-echo '[mysqld]' | sudo tee /etc/mysql/mariadb.conf.d/99-bookstack.cnf
-echo 'port = 3306' | sudo tee -a /etc/mysql/mariadb.conf.d/99-bookstack.cnf
-
-# 清理可能的 --skip-networking 残留进程
-sudo systemctl stop mysql
-sudo pkill -f "skip-networking" 2>/dev/null || true
-
-# 重启 MySQL
-sudo systemctl start mysql
-
-# 验证
-sudo ss -tlnp | grep 3306
-```
+| 服务不断重启 | 初始化失败或配置错误 | `sudo journalctl -u bookstack -n 50` 查看错误详情 |

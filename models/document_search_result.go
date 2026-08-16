@@ -56,13 +56,13 @@ WHERE book.privately_owned = 0 AND (doc.document_name LIKE ? OR doc.release LIKE
   LEFT JOIN md_relationship AS rel ON book.book_id = rel.book_id AND rel.role_id = 0
   LEFT JOIN md_members as member ON rel.member_id = member.member_id
 WHERE book.privately_owned = 0 AND (doc.document_name LIKE ? OR doc.release LIKE ?)
- ORDER BY doc.document_id DESC LIMIT ?,? `
+ ORDER BY doc.document_id DESC LIMIT ? OFFSET ? `
 
 		err = o.Raw(sql1, keyword, keyword).QueryRow(&totalCount)
 		if err != nil {
 			return
 		}
-		_, err = o.Raw(sql2, keyword, keyword, offset, pageSize).QueryRows(&searchResult)
+		_, err = o.Raw(sql2, keyword, keyword, pageSize, offset).QueryRows(&searchResult)
 		if err != nil {
 			return
 		}
@@ -79,13 +79,13 @@ WHERE (book.privately_owned = 0 OR rel1.relationship_id > 0)  AND (doc.document_
   LEFT JOIN md_members as member ON rel.member_id = member.member_id
   LEFT JOIN md_relationship AS rel1 ON doc.book_id = rel1.book_id AND rel1.member_id = ?
 WHERE (book.privately_owned = 0 OR rel1.relationship_id > 0)  AND (doc.document_name LIKE ? OR doc.release LIKE ?)
- ORDER BY doc.document_id DESC LIMIT ?,? `
+ ORDER BY doc.document_id DESC LIMIT ? OFFSET ? `
 
 		err = o.Raw(sql1, memberId, keyword, keyword).QueryRow(&totalCount)
 		if err != nil {
 			return
 		}
-		_, err = o.Raw(sql2, memberId, keyword, keyword, offset, pageSize).QueryRows(&searchResult)
+		_, err = o.Raw(sql2, memberId, keyword, keyword, pageSize, offset).QueryRows(&searchResult)
 		if err != nil {
 			return
 		}
@@ -98,12 +98,12 @@ func (m *DocumentSearchResult) SearchDocument(keyword string, bookId int, page, 
 	o := orm.NewOrm()
 
 	fields := []string{"document_id", "document_name", "identify", "book_id"}
-	sql := "SELECT %v FROM md_documents WHERE book_id = " + strconv.Itoa(bookId) + " AND (document_name LIKE ? OR `release` LIKE ?) "
+	sql := "SELECT %v FROM md_documents WHERE book_id = " + strconv.Itoa(bookId) + " AND (document_name LIKE ? OR release LIKE ?)"
 	sqlCount := fmt.Sprintf(sql, "count(document_id) cnt")
 	sql = fmt.Sprintf(sql, strings.Join(fields, ",")) + " order by vcnt desc"
 	if bookId == 0 {
 		// bookId 为 0 的时候，只搜索公开的书籍的文档
-		sql = "SELECT %v FROM md_documents d left join md_books b on d.book_id=b.book_id WHERE b.privately_owned=0 and (d.document_name LIKE ? OR d.`release` LIKE ? )"
+		sql = "SELECT %v FROM md_documents d left join md_books b on d.book_id=b.book_id WHERE b.privately_owned=0 and (d.document_name LIKE ? OR d.release LIKE ? )"
 		sqlCount = fmt.Sprintf(sql, "count(d.document_id) cnt")
 		sql = fmt.Sprintf(sql, "d."+strings.Join(fields, ",d.")) + " order by d.vcnt desc"
 	}

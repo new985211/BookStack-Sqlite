@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"database/sql"
 	"encoding/gob"
 	"flag"
 	"fmt"
@@ -27,30 +26,20 @@ var (
 	LogFile           = "./logs"
 )
 
-// RegisterDataBase 注册数据库
+// RegisterDataBase 注册数据库（嵌入式 SQLite，无需外部数据库连接）
 func RegisterDataBase() {
+	// modernc.org/sqlite 是纯 Go 实现的 SQLite 驱动（无 CGO，可交叉编译），
+	// 其在 database/sql 中注册的驱动名为 "sqlite"。这里将其映射到 Beego ORM 的 SQLite 方言。
+	orm.RegisterDriver("sqlite", orm.DRSqlite)
 
-	host := beego.AppConfig.String("db_host")
-	database := beego.AppConfig.String("db_database")
-	username := beego.AppConfig.String("db_username")
-	password := beego.AppConfig.String("db_password")
-
-	port := beego.AppConfig.String("db_port")
-
-	createDB := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s` DEFAULT CHARSET utf8mb4 COLLATE utf8mb4_general_ci", database)
-	conn := fmt.Sprintf("%s:%s@tcp(%s:%s)/", username, password, host, port)
-	db, err := sql.Open("mysql", conn)
-	if err != nil {
-		panic(err)
-	}
-	_, err = db.Exec(createDB)
-	if err != nil {
-		panic(err)
+	dbFile := beego.AppConfig.DefaultString("db_file", "data/bookstack.db")
+	if dir := filepath.Dir(dbFile); dir != "." {
+		os.MkdirAll(dir, 0755)
 	}
 
-	dataSource := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=true&loc=Local", username, password, host, port, database)
-
-	orm.RegisterDataBase("default", "mysql", dataSource)
+	// busy_timeout 缓解并发写锁；WAL 提升读写并发；foreign_keys 开启外键约束。
+	dsn := "file:" + dbFile + "?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+	orm.RegisterDataBase("default", "sqlite", dsn)
 
 	if beego.AppConfig.String("runmode") == "dev" {
 		orm.Debug = true
@@ -245,6 +234,14 @@ func ResolveCommand(args []string) {
 		config := filepath.Join("conf", "app.conf.example")
 		if !utils.FileExists(ConfigurationFile) && utils.FileExists(config) {
 			utils.CopyFile(ConfigurationFile, config)
+		}
+		// app.conf 通过 include 引入 oss.conf 和 oauth.conf，首次运行需从 example 生成
+		for _, f := range []string{"oss.conf", "oauth.conf"} {
+			confFile := filepath.Join("conf", f)
+			exampleFile := filepath.Join("conf", f+".example")
+			if !utils.FileExists(confFile) && utils.FileExists(exampleFile) {
+				utils.CopyFile(confFile, exampleFile)
+			}
 		}
 	}
 	gocaptcha.ReadFonts(filepath.Join("static", "fonts"), ".ttf")

@@ -54,7 +54,7 @@ func GetPagesInfo(tableName string, currentpage int, pagesize int, conditions st
 		}
 		totalpages = temp
 	}
-	rs = o.Raw("select *  from  " + tableName + "  where 1 > 0 " + conditions + " LIMIT " + con.Itoa((currentpage-1)*pagesize) + "," + con.Itoa(pagesize))
+	rs = o.Raw("select *  from  " + tableName + "  where 1 > 0 " + conditions + " LIMIT " + con.Itoa(pagesize) + " OFFSET " + con.Itoa((currentpage-1)*pagesize))
 	return totalItem, totalpages, rs
 }
 

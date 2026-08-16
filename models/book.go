@@ -256,7 +256,7 @@ func (m *Book) FindToPager(pageIndex, pageSize, memberId int, wd string, Private
 	sqlQuery := "SELECT book.*,rel.member_id,rel.role_id,m.account as create_name FROM " + m.TableNameWithPrefix() + " AS book" +
 		" LEFT JOIN " + relationship.TableNameWithPrefix() + " AS rel ON book.book_id=rel.book_id AND rel.member_id = ? " +
 		" LEFT JOIN " + NewMember().TableNameWithPrefix() + " AS m ON rel.member_id=m.member_id " +
-		" WHERE rel.relationship_id > 0 %v ORDER BY book.book_id DESC LIMIT " + fmt.Sprintf("%d,%d", offset, pageSize)
+		" WHERE rel.relationship_id > 0 %v ORDER BY book.book_id DESC LIMIT " + fmt.Sprintf("%d OFFSET %d", pageSize, offset)
 
 	cond := []string{}
 	if wd != "" { // 不需要处理 wd 和 args，因为在上面已处理过
@@ -438,7 +438,7 @@ func (m *Book) HomeData(pageIndex, pageSize int, orderType BookOrder, lang strin
 		lang = ""
 	}
 	if strings.TrimSpace(lang) != "" {
-		condStr = condStr + " and `lang` = '" + lang + "'"
+		condStr = condStr + " and lang = '" + lang + "'"
 	}
 	sqlFmt := "select %v from md_books " + condStr
 	fieldStr := strings.Join(fields, ",")
@@ -495,7 +495,7 @@ func (m *Book) homeData(pageIndex, pageSize int, orderType BookOrder, lang strin
 		lang = ""
 	}
 	if strings.TrimSpace(lang) != "" {
-		condStr = condStr + " and `lang` = '" + lang + "'"
+		condStr = condStr + " and lang = '" + lang + "'"
 	}
 	sqlFmt := "select %v from md_books b left join md_book_category c on b.book_id=c.book_id" + condStr
 	fieldStr := "b." + strings.Join(fields, ",b.")
@@ -528,9 +528,9 @@ func (m *Book) FindForHomeToPager(pageIndex, pageSize, member_id int, orderType 
 			LEFT JOIN md_relationship AS rel ON rel.book_id = book.book_id AND rel.member_id = ?
 			LEFT JOIN md_relationship AS rel1 ON rel1.book_id = book.book_id AND rel1.role_id = 0
 			LEFT JOIN md_members AS member ON rel1.member_id = member.member_id
-			WHERE rel.relationship_id > 0 OR book.privately_owned = 0 ORDER BY order_index DESC ,book.book_id DESC LIMIT ?,?`
+			WHERE rel.relationship_id > 0 OR book.privately_owned = 0 ORDER BY order_index DESC ,book.book_id DESC LIMIT ? OFFSET ?`
 
-		_, err = o.Raw(sql2, member_id, offset, pageSize).QueryRows(&books)
+		_, err = o.Raw(sql2, member_id, pageSize, offset).QueryRows(&books)
 		return
 	}
 
@@ -544,9 +544,9 @@ func (m *Book) FindForHomeToPager(pageIndex, pageSize, member_id int, orderType 
 	sql := `SELECT book.*,rel.*,member.account AS create_name FROM md_books AS book
 			LEFT JOIN md_relationship AS rel ON rel.book_id = book.book_id AND rel.role_id = 0
 			LEFT JOIN md_members AS member ON rel.member_id = member.member_id
-			WHERE book.privately_owned = 0 ORDER BY order_index DESC ,book.book_id DESC LIMIT ?,?`
+			WHERE book.privately_owned = 0 ORDER BY order_index DESC ,book.book_id DESC LIMIT ? OFFSET ?`
 
-	_, err = o.Raw(sql, offset, pageSize).QueryRows(&books)
+	_, err = o.Raw(sql, pageSize, offset).QueryRows(&books)
 	return
 }
 
@@ -567,9 +567,9 @@ func (m *Book) FindForLabelToPager(keyword string, pageIndex, pageSize, memberId
 			LEFT JOIN md_relationship AS rel ON rel.book_id = book.book_id AND rel.member_id = ?
 			LEFT JOIN md_relationship AS rel1 ON rel1.book_id = book.book_id AND rel1.role_id = 0
 			LEFT JOIN md_members AS member ON rel1.member_id = member.member_id
-			WHERE (rel.relationship_id > 0 OR book.privately_owned = 0) AND  (book.label LIKE ? or book.book_name like ?) ORDER BY order_index DESC ,book.book_id DESC LIMIT ?,?`
+			WHERE (rel.relationship_id > 0 OR book.privately_owned = 0) AND  (book.label LIKE ? or book.book_name like ?) ORDER BY order_index DESC ,book.book_id DESC LIMIT ? OFFSET ?`
 
-		_, err = o.Raw(sql2, memberId, keyword, keyword, offset, pageSize).QueryRows(&books)
+		_, err = o.Raw(sql2, memberId, keyword, keyword, pageSize, offset).QueryRows(&books)
 		return
 	}
 
@@ -581,9 +581,9 @@ func (m *Book) FindForLabelToPager(keyword string, pageIndex, pageSize, memberId
 	sql := `SELECT book.*,rel.*,member.account AS create_name FROM md_books AS book
 			LEFT JOIN md_relationship AS rel ON rel.book_id = book.book_id AND rel.role_id = 0
 			LEFT JOIN md_members AS member ON rel.member_id = member.member_id
-			WHERE book.privately_owned = 0 AND (book.label LIKE ? or book.book_name LIKE ?) ORDER BY order_index DESC ,book.book_id DESC LIMIT ?,?`
+			WHERE book.privately_owned = 0 AND (book.label LIKE ? or book.book_name LIKE ?) ORDER BY order_index DESC ,book.book_id DESC LIMIT ? OFFSET ?`
 
-	_, err = o.Raw(sql, keyword, keyword, offset, pageSize).QueryRows(&books)
+	_, err = o.Raw(sql, keyword, keyword, pageSize, offset).QueryRows(&books)
 	return
 }
 
@@ -721,8 +721,6 @@ func (b *Book) SearchBookByLabel(labels []string, limit int, excludeIds []int) (
 		return
 	}
 
-	rawRegex := strings.Join(labels, "|")
-
 	excludeClause := ""
 	if len(excludeIds) == 1 {
 		excludeClause = fmt.Sprintf("book_id != %d AND", excludeIds[0])
@@ -731,9 +729,18 @@ func (b *Book) SearchBookByLabel(labels []string, limit int, excludeIds []int) (
 		excludeClause = fmt.Sprintf("book_id NOT IN (%s) AND", excludeVal)
 	}
 
-	sql := fmt.Sprintf("SELECT book_id FROM md_books WHERE %v label REGEXP ? ORDER BY star DESC LIMIT ?", excludeClause)
+	// SQLite 无内置 REGEXP，改为 LIKE 逐标签模糊匹配（标签为逗号分隔字符串）
+	conds := make([]string, 0, len(labels))
+	args := make([]interface{}, 0, len(labels)+1)
+	for _, label := range labels {
+		conds = append(conds, "label LIKE ?")
+		args = append(args, "%"+label+"%")
+	}
+
+	sql := fmt.Sprintf("SELECT book_id FROM md_books WHERE %v (%v) ORDER BY star DESC LIMIT ?", excludeClause, strings.Join(conds, " OR "))
+	args = append(args, limit)
 	o := orm.NewOrm()
-	_, err = o.Raw(sql, rawRegex, limit).QueryRows(&bookIds)
+	_, err = o.Raw(sql, args...).QueryRows(&bookIds)
 	if err != nil {
 		logs.Error("failed to execute sql: %s, err: %s", sql, err.Error())
 	}

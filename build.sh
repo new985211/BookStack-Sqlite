@@ -13,6 +13,9 @@ LDFLAGS="-s -w -X github.com/TruthHun/BookStack/utils.GitHash=${GITHASH} -X gith
 
 ##########
 
+# 清除 Go 构建缓存，确保交叉编译干净（全新构建）
+go clean -cache
+
 rm -rf output/${VERSION}
 mkdir -p output/${VERSION}
 
@@ -98,7 +101,12 @@ if ! id -u bookstack &>/dev/null; then
     useradd --system --no-create-home --shell /usr/sbin/nologin bookstack
 fi
 
+# Create data directory for the embedded SQLite database
+mkdir -p /opt/bookstack/data
 chown -R bookstack:bookstack /opt/bookstack
+
+# Initialize the embedded SQLite database (creates data/bookstack.db, tables, admin user)
+su -s /bin/bash bookstack -c "cd /opt/bookstack && ./bookstack install" || true
 
 systemctl daemon-reload
 systemctl enable bookstack
