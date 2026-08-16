@@ -348,9 +348,6 @@ bash build.sh <version>
 构建脚本使用 `CGO_ENABLED=0` 进行纯静态交叉编译（得益于纯 Go 的 SQLite 驱动），并注入版本号、GitHash、构建时间等元信息。
 
 <a name="aboutme"></a>
-## 关于本人
-2014年7月本科"毕业"踏入IT行业；Web全栈工程师；什么都懂一点，什么都不精通。
-
 
 <a name="support"></a>
 ## 赞助我
