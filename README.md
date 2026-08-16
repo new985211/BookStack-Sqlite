@@ -1,4 +1,3 @@
-
 目录：
 - [BookStack 简介](#bookstack-简介)
   - [开源](#开源)
@@ -7,6 +6,7 @@
     - [演示站点](#演示站点)
     - [正式站点](#正式站点)
   - [更新、维护和升级](#更新维护和升级)
+  - [数据库变更说明](#数据库变更说明)
   - [功能与亮点](#功能与亮点)
     - [书籍分类(V1.2 +)](#书籍分类v12-)
     - [用户主页(V1.2 +)](#用户主页v12-)
@@ -21,12 +21,14 @@
     - [更美观、简洁的页面布局和更为完善的移动端兼容](#更美观简洁的页面布局和更为完善的移动端兼容)
   - [TODO](#todo)
   - [安装与使用](#安装与使用)
+  - [构建与打包](#构建与打包)
   - [关于本人](#关于本人)
   - [赞助我](#赞助我)
     - [支付宝打赏赞助](#支付宝打赏赞助)
     - [微信打赏赞助](#微信打赏赞助)
 
     
+
 <a name="intro"></a>
 # BookStack 简介
 
@@ -58,7 +60,7 @@ BookStack是基于[Mindoc](https://github.com/lifei6671/mindoc)开发的，为�
 其中肯定还是有不足的地方，大家在使用的过程中，遇到问题，欢迎反馈。
 
 源码托管：
-- Github: https://github.com/TruthHun/BookStack
+- Github: https://github.com/new985211/BookStack-Sqlite
 - Gitee: https://gitee.com/truthhun/BookStack
 
 <a name="qqgroup"></a>
@@ -90,7 +92,45 @@ BookStack 安装使用手册：[https://www.bookstack.cn/books/help](https://www
 <a name="upgrade"></a>
 ## 更新、维护和升级
 
-- 程序下载与升级日志，看这里--> [Release](/truthhun/BookStack/releases)
+- 程序下载与升级日志，看这里--> [Release](https://github.com/new985211/BookStack-Sqlite/releases)
+
+<a name="db"></a>
+## 数据库变更说明
+
+本项目原先依赖外部 **MySQL**，安装后需手工建库、配置数据库连接参数。现版本已将数据层迁移为**嵌入式 SQLite**，安装后**无需任何数据库连接配置**，`dpkg -i` 即用。
+
+### 变更内容
+
+- 数据库驱动由 `github.com/go-sql-driver/mysql` 替换为 `modernc.org/sqlite`。
+- 数据库文件默认位于程序运行目录下的 `data/bookstack.db`，首次运行时自动创建表结构、初始化管理员账号和演示书籍。
+- 删除全部 MySQL 专用代码：`CREATE DATABASE`、`SHOW INDEX`、`ALTER TABLE`、`INSERT IGNORE` 等 DDL，以及 `LIMIT ?,?` 等 MySQL 方言 SQL（统一改为 SQLite 兼容写法）。
+- 删除旧的 MySQL 数据迁移脚本（`commands/migrate/migrate_v03.go`）。
+- 配置文件中的 `db_host` / `db_port` / `db_username` / `db_password` / `db_database` 等键全部移除，仅保留：
+
+```ini
+db_adapter = sqlite3
+db_file = data/bookstack.db
+```
+
+### 设计考虑
+
+1. **为何用 `modernc.org/sqlite` 而不是 `mattn/go-sqlite3`**
+   `mattn/go-sqlite3` 基于 CGO，而本项目的构建脚本使用 `CGO_ENABLED=0` 交叉编译（amd64 / arm64 / macOS / Windows）。纯 Go 实现的 `modernc.org/sqlite` 无 CGO 依赖，可在各平台直接交叉编译，无需额外交叉编译工具链。
+
+2. **为何不迁移存量 MySQL 数据**
+   本次改造面向「全新部署、装完即用」的场景。若需保留既有数据，需要额外开发一次性 MySQL → SQLite 导出/导入工具，不属于本次范围。
+
+3. **搜索与 Elasticsearch**
+   Elasticsearch 仍是**可选**功能（默认关闭）。未启用 ES 时，全文搜索自动退化为基于 SQLite 的 `LIKE` 模糊查询，功能不受影响。
+
+4. **表前缀保留**
+   ORM 表前缀 `md_`（`db_prefix`）保持不变，模型定义无需改动。
+
+5. **配置文件自动生成**
+   `conf/app.conf`、`oss.conf`、`oauth.conf` 在首次运行时会自动从对应的 `.example` 模板生成，无需手工复制。
+
+6. **并发写处理**
+   SQLite 为单写者数据库，针对阅读计数、收藏、评论等热点写操作，已在连接串中启用 `busy_timeout` 与 WAL 模式以缓解写锁冲突。
 
 <a name="func"></a>
 ## 功能与亮点
@@ -219,39 +259,93 @@ BookStack 安装使用手册：[https://www.bookstack.cn/books/help](https://www
 
 <a name="todo"></a>
 ## TODO
-- 文档阅读书签
-- 微信第三方登录
+
+当前仍待实现的功能：
+
 - 微博第三方登录
-- 收费下载和收费阅读(放在最后开发)
-- 签到功能
-- 增加广告位和广告管理
-- 积分功能
-- 除了数据库配置项外，其余配置项尽可能在管理后台可配置
-- 增强搜索功能，上elasticsearch
-- 简化程序部署，上docker
-- 微信小程序(放到2.x版本开发)
-- 版本管理 ？(待找到更优解决方案了再实现)
-- 使用weex开发手机端APP ? (vue.js熟练了再抽时间实现)
-- 使用electron开发桌面端，实现类似网易`有道云笔记`的功能 ? (vue.js熟练了再抽时间实现)
+- 收费下载和收费阅读
+- 移动端 APP（weex / 原生）
+- 桌面端（electron）
+
+> 注：早期 TODO 中列出的签到、广告位与广告管理、积分、Elasticsearch 搜索、Docker 部署、微信小程序 API、版本管理，以及微信 / GitHub / Gitee / QQ 第三方登录等功能均已实现，此处不再列出。
 
 <a name="install"></a>
 ## 安装与使用
 
+### 方式一：deb 包安装（推荐，免数据库配置）
 
-为了方便，安装和使用教程，请移步到这里：http://www.bookstack.cn/read/help/Ubuntu.md
+系统已内置 SQLite，安装 deb 包后无需配置任何数据库即可使用。详细说明见 [docs/deb-install.md](docs/deb-install.md)。
 
-> 目前只写了Ubuntu下的安装教程，Windows下的安装和使用教程，暂时没时间
+```bash
+# 根据机器架构选择对应 deb 包
+sudo dpkg -i bookstack_<version>_amd64.deb   # x86_64
+sudo dpkg -i bookstack_<version>_arm64.deb   # ARM (aarch64)
 
-有两个模板文件，需要手动修改下：
-`/views/widgets/pdf_footer.html` 导出PDF文档时，pdf的footer显示内容
-`/views/document/tpl_statement.html` 修改成你想要的文案内容或者删除该文件。如果保留该文件，必须要有`h1`标签，因为程序要提取你的`h1`标签用于导出文档的目录生成
+# 安装脚本会自动初始化数据库并启动服务，访问：
+#   http://<服务器IP>:8181
+```
 
-默认的管理员账号密码均是`admin`
+离线环境下可使用 `scripts/offline-install.sh` 一键安装：
 
-> `v1.0`升级到`v1.1`,直接下载对应系统的发行版本，然后根据配置文件的配置提示修改配置文件，然后覆盖升级即可。本次升级，没有改动数据库。
+```bash
+sudo bash scripts/offline-install.sh
+```
 
-关于二次开发，请看这个issue [README.md中能否添源码编译说明](https://github.com/TruthHun/BookStack/issues/3)
+### 方式二：源码运行
 
+```bash
+# 1. 编译
+go build -o BookStack .
+
+# 2. 初始化数据库（自动创建 data/bookstack.db、表结构、管理员账号）
+./BookStack install
+
+# 3. 启动（默认监听 8181 端口）
+./BookStack
+```
+
+### 默认管理员账号
+
+- 账号：`admin`
+- 密码：`admin888`
+
+登录后请尽快在 `设置` -> `密码` 中修改默认密码。
+
+### 配置说明
+
+首次运行会自动从 `conf/app.conf.example` 生成 `conf/app.conf`，从 `oss.conf.example` / `oauth.conf.example` 生成对应的配置文件。常用配置项：
+
+```ini
+db_adapter = sqlite3                # 数据库适配器（固定）
+db_file = data/bookstack.db         # SQLite 数据库文件路径
+httpport = 8181                     # 监听端口
+runmode = prod                      # 运行模式：dev / prod
+store_type = local                  # 存储类型：local / oss
+```
+
+有两个模板文件，需要按需修改：
+
+- `/views/widgets/pdf_footer.html` 导出 PDF 文档时，pdf 的 footer 显示内容
+- `/views/document/tpl_statement.html` 修改成你想要的文案内容或者删除该文件。如果保留该文件，必须要有 `h1` 标签，因为程序要提取你的 `h1` 标签用于导出文档的目录生成
+
+> 生成 PDF / epub / mobi 离线文档需安装并配置 [calibre](https://github.com/TruthHun/converter)；Markdown 预览渲染需 Chrome（headless）或 puppeteer。
+
+关于二次开发，请看这个issue [README.md中能否添源码编译说明](https://github.com/new985211/BookStack-Sqlite/issues/3)
+
+<a name="build"></a>
+## 构建与打包
+
+```bash
+# 交叉编译并打包 deb（amd64 + arm64），同时产出 macOS / Windows 可执行文件
+bash build.sh <version>
+# 例如：bash build.sh 2.0
+# 产物位于 output/<version>/ 目录：
+#   - bookstack_<version>_amd64.deb
+#   - bookstack_<version>_arm64.deb
+#   - linux_amd64/ linux_arm64/ mac/ windows/ 下的可执行文件
+```
+
+构建脚本使用 `CGO_ENABLED=0` 进行纯静态交叉编译（得益于纯 Go 的 SQLite 驱动），并注入版本号、GitHash、构建时间等元信息。
 
 <a name="aboutme"></a>
 ## 关于本人
@@ -266,10 +360,8 @@ BookStack 安装使用手册：[https://www.bookstack.cn/books/help](https://www
 
 <a name="alipay"></a>
 ### 支付宝打赏赞助
-![支付宝打赏赞助](static/openstatic/alipay.jpg)
+<img src="static/openstatic/alipay.jpg" alt="支付宝打赏赞助" style="zoom: 33%;" />
 
 <a name="wxpay"></a>
 ### 微信打赏赞助
-![微信打赏赞助](static/openstatic/wxpay.jpg)
-
-
+<img src="static/openstatic/wxpay.jpg" alt="微信打赏赞助" style="zoom:33%;" />
